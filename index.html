@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tarkov Surfers - Sanitar Chase</title>
+    <!-- PWA Manifest & Theme -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#111111">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Tarkov Surfers">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+        
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #111;
+            font-family: 'Orbitron', sans-serif;
+            touch-action: none;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .screen {
+            background: rgba(20, 20, 20, 0.95);
+            border: 2px solid #555;
+            box-shadow: 0 0 20px #000;
+            padding: 2rem;
+            border-radius: 1rem;
+            text-align: center;
+            pointer-events: auto;
+            backdrop-filter: blur(5px);
+            max-width: 90%;
+            width: 450px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #444, #222);
+            color: white;
+            border: 1px solid #666;
+            padding: 1rem 2rem;
+            font-size: 1.25rem;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: bold;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.2s;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+            margin-top: 1rem;
+            width: 100%;
+        }
+
+        .btn:hover {
+            transform: scale(1.02);
+            background: linear-gradient(45deg, #555, #333);
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .hud-text {
+            color: #ccc;
+            text-shadow: 1px 1px 2px #000;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .timer-container {
+            text-align: left;
+        }
+
+        .timer-value {
+            font-size: 2.5rem;
+            color: #fff;
+            text-shadow: 1px 1px 5px #000;
+        }
+
+        #buff-display {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            align-items: flex-end;
+        }
+
+        .buff-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(0,0,0,0.8);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid #777;
+            color: #fff;
+            font-size: 1.2rem;
+            box-shadow: 0 0 10px rgba(255,255,255,0.2);
+        }
+
+        .buff-badge img {
+            width: 32px;
+            height: 32px;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="hud" class="hidden">
+        <div class="timer-container">
+            <div class="hud-text">TIME TO CATCH</div>
+            <div id="timerValue" class="timer-value">60.0</div>
+        </div>
+        <div id="buff-display">
+            <!-- Active buffs will appear here -->
+        </div>
+    </div>
+
+    <div id="mainMenu" class="ui-layer">
+        <div class="screen">
+            <h1 class="text-3xl md:text-4xl font-black text-gray-100 mb-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">TARKOV SURFERS</h1>
+            <p class="text-sm text-gray-400 mb-4">Chase Sanitar down the highway! 🏃‍♂️</p>
+            
+            <div class="text-left text-xs text-gray-300 mb-6 bg-black/60 p-3 rounded border border-gray-600 space-y-1">
+                <p><b>W / ⬆️</b> : Jump over Barriers (Staff/meshok.png)</p>
+                <p><b>S / ⬇️</b> : Duck under Killa (Staff/Killa.png)</p>
+                <p><b>A/D / ⬅️➡️</b> : Change Lanes</p>
+                <hr class="border-gray-700 my-1">
+                <p>Survive for 60 seconds without running out of time!</p>
+                <p class="text-red-400">Hitting obstacles ADDS 10 seconds penalty!</p>
+                <hr class="border-gray-700 my-1">
+                <p><b>Loot:</b> SJ6 (Speed), Pach (Slow/Eat), Obdolbos (Risk!)</p>
+            </div>
+
+            <button id="startBtn" class="btn">Start Chase</button>
+        </div>
+    </div>
+
+    <div id="gameOverScreen" class="ui-layer hidden">
+        <div class="screen border-red-800 shadow-[0_0_20px_#800000]">
+            <h1 class="text-4xl font-black text-red-600 mb-2 drop-shadow-[0_2px_4px_#000]">K.I.A.</h1>
+            <p id="deathReason" class="text-base text-red-200 mb-4">You lost the target.</p>
+            <button id="restartBtn" class="btn">Try Again</button>
+        </div>
+    </div>
+
+    <div id="winScreen" class="ui-layer hidden">
+        <div class="screen border-green-800 shadow-[0_0_20px_#005500]">
+            <h1 class="text-4xl font-black text-green-500 mb-2 drop-shadow-[0_2px_4px_#000]">TARGET SECURED</h1>
+            <p class="text-base text-green-200 mb-4">You caught Sanitar!</p>
+            <button id="winRestartBtn" class="btn">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Register Service Worker for PWA Offline Support
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then(reg => console.log('PWA Service Worker registered!', reg))
+                    .catch(err => console.log('Service Worker registration failed: ', err));
+            });
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let width, height;
+        
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Game Constants
+        const LANE_WIDTH = 0.28; 
+        const HORIZON_Y = 0.38; 
+        const START_TIME = 60.0;
+        
+        // Load Images from Staff folder
+        const imgDoctor = new Image();
+        imgDoctor.src = 'Staff/Doctor.png';
+        
+        const imgSanitar = new Image();
+        imgSanitar.src = 'Staff/Sanitar.png';
+
+        const imgMeshok = new Image();
+        imgMeshok.src = 'Staff/meshok.png';
+
+        const imgKilla = new Image();
+        imgKilla.src = 'Staff/Killa.png';
+
+        const imgSj6 = new Image();
+        imgSj6.src = 'Staff/sj6.png';
+
+        const imgPach = new Image();
+        imgPach.src = 'Staff/pach.png';
+
+        const imgObdolbos = new Image();
+        imgObdolbos.src = 'Staff/obdolbos.png';
+
+        const imgLocation = new Image();
+        imgLocation.src = 'Staff/Location.jpg';
+
+        // Sanitar Speech Quotes
+        const sanitarQuotes = [
+            "Коллеги, коллеги, отходим, отходим!",
+            "Ох, прячься-речься!",
+            "Сидим, не рыпаемся.",
+            "Тихо!",
+            "Спокойно, коллеги.",
+            "Коллеги, попрошу потише.",
+            "Шум-гам, работать не дают.",
+            "Так, кто-то сзади нас нарисовался.",
+            "Еб, тут сзади кто-то!",
+            "Ай-яй-яй-яй, болит, уже выехал!",
+            "Всё, нам прямая дорога в морг.",
+            "Эй-эй-эй-эй, меня тут упаковать хотят, вы где?"
+        ];
+        let currentQuote = "";
+        let quoteTimer = 0;
+        let voiceTimer = 5.0;
+
+        // Audio System via Web Audio API
+        const AudioSys = {
+            ctx: null,
+            init: function() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            },
+            playTone: function(freq1, freq2, type, duration, vol = 0.1) {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = type;
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                
+                osc.frequency.setValueAtTime(freq1, this.ctx.currentTime);
+                if (freq2) {
+                    osc.frequency.exponentialRampToValueAtTime(freq2, this.ctx.currentTime + duration);
+                }
+                
+                gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            },
+            jump: function() { this.playTone(300, 700, 'sine', 0.25, 0.1); },
+            duck: function() { this.playTone(400, 180, 'sine', 0.25, 0.1); },
+            hit: function() { this.playTone(120, 40, 'sawtooth', 0.4, 0.2); },
+            pickup: function() { this.playTone(700, 1300, 'square', 0.2, 0.1); },
+            eat: function() {
+                if(!this.ctx) return;
+                const t = this.ctx.currentTime;
+                for(let i=0; i<6; i++) {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.value = (i%2===0) ? 650 : 380;
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    gain.gain.value = 0.1;
+                    gain.gain.setTargetAtTime(0, t + i*0.08 + 0.04, 0.01);
+                    osc.start(t + i*0.08);
+                    osc.stop(t + i*0.08 + 0.08);
+                }
+            },
+            win: function() {
+                if(!this.ctx) return;
+                const t = this.ctx.currentTime;
+                [440, 554, 659, 880].forEach((f, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.frequency.value = f;
+                    gain.gain.setValueAtTime(0.1, t + i*0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.01, t + i*0.12 + 0.25);
+                    osc.start(t + i*0.12);
+                    osc.stop(t + i*0.12 + 0.25);
+                });
+            },
+            lose: function() { this.playTone(220, 60, 'sawtooth', 0.8, 0.2); }
+        };
+
+        let gameState = 'menu'; // menu, playing, gameover, win
+        let lastTime = 0;
+        let gameTimer = START_TIME;
+        
+        let speedMultiplier = 1.0;
+        let baseSpeed = 1.0;
+        let distanceTraveled = 0;
+        
+        let activeBuff = null; 
+        let buffTimeRemaining = 0;
+
+        const player = {
+            lane: 0, // -1, 0, 1
+            targetLane: 0,
+            y: 0.85, 
+            state: 'run', // run, jump, duck
+            stateTimer: 0,
+            flashTimer: 0
+        };
+
+        const sanitar = {
+            lane: 0,
+            targetLane: 0,
+            state: 'run', // run, jump, duck
+            stateTimer: 0,
+            actionCooldown: 3.0
+        };
+
+        let objects = []; 
+        let floatingTexts = [];
+
+        window.addEventListener('keydown', (e) => {
+            if (gameState !== 'playing') return;
+            
+            if (['w', 'a', 's', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+            }
+
+            if ((e.key === 'a' || e.key === 'ArrowLeft') && player.targetLane > -1) {
+                player.targetLane--;
+            } else if ((e.key === 'd' || e.key === 'ArrowRight') && player.targetLane < 1) {
+                player.targetLane++;
+            } else if ((e.key === 'w' || e.key === 'ArrowUp') && player.state === 'run') {
+                player.state = 'jump';
+                player.stateTimer = 0.55; 
+                AudioSys.jump();
+            } else if ((e.key === 's' || e.key === 'ArrowDown') && player.state === 'run') {
+                player.state = 'duck';
+                player.stateTimer = 0.55; 
+                AudioSys.duck();
+            }
+        });
+
+        // Touch swipe handling
+        let touchStartX = 0;
+        let touchStartY = 0;
+        window.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, {passive: false});
+
+        window.addEventListener('touchend', e => {
+            if (gameState !== 'playing') return;
+            let touchEndX = e.changedTouches[0].screenX;
+            let touchEndY = e.changedTouches[0].screenY;
+            let dx = touchEndX - touchStartX;
+            let dy = touchEndY - touchStartY;
+            
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (dx > 40 && player.targetLane < 1) player.targetLane++;
+                else if (dx < -40 && player.targetLane > -1) player.targetLane--;
+            } else {
+                if (dy < -40 && player.state === 'run') {
+                    player.state = 'jump';
+                    player.stateTimer = 0.55;
+                    AudioSys.jump();
+                } else if (dy > 40 && player.state === 'run') {
+                    player.state = 'duck';
+                    player.stateTimer = 0.55;
+                    AudioSys.duck();
+                }
+            }
+        }, {passive: false});
+
+        function spawnObject() {
+            if (gameState !== 'playing') return;
+            
+            if (Math.random() > 0.032 * (speedMultiplier * baseSpeed)) return;
+            
+            const lane = Math.floor(Math.random() * 3) - 1;
+            const recentInLane = objects.some(o => o.lane === lane && o.z < 2.5);
+            if (recentInLane) return;
+
+            let type, isItem = false, imgAsset = null;
+            
+            if (Math.random() < 0.2) {
+                isItem = true;
+                const roll = Math.random();
+                if (roll < 0.33) { type = 'sj6'; imgAsset = imgSj6; }
+                else if (roll < 0.66) { type = 'obdolbos'; imgAsset = imgObdolbos; }
+                else { type = 'pach'; imgAsset = imgPach; }
+            } else {
+                type = Math.random() < 0.5 ? 'high' : 'low';
+                imgAsset = (type === 'high') ? imgMeshok : imgKilla;
+            }
+
+            objects.push({
+                lane: lane,
+                z: 0.05, 
+                type: type,
+                isItem: isItem,
+                img: imgAsset,
+                active: true
+            });
+        }
+
+        function addFloatingText(text, color) {
+            floatingTexts.push({
+                text: text,
+                color: color,
+                y: 0.5,
+                alpha: 1.0
+            });
+        }
+
+        function update(dt) {
+            if (gameState !== 'playing') return;
+
+            gameTimer -= dt;
+            document.getElementById('timerValue').innerText = Math.max(0, gameTimer).toFixed(1) + "s";
+            
+            if (gameTimer <= 0) {
+                winGame();
+                return;
+            }
+
+            // Sanitar speech quote trigger timer (every 5 seconds)
+            voiceTimer -= dt;
+            if (voiceTimer <= 0) {
+                currentQuote = sanitarQuotes[Math.floor(Math.random() * sanitarQuotes.length)];
+                quoteTimer = 3.5;
+                voiceTimer = 5.0;
+            }
+
+            if (quoteTimer > 0) {
+                quoteTimer -= dt;
+                if (quoteTimer <= 0) currentQuote = "";
+            }
+
+            if (buffTimeRemaining > 0) {
+                buffTimeRemaining -= dt;
+                if (buffTimeRemaining <= 0) {
+                    activeBuff = null;
+                    speedMultiplier = 1.0;
+                    document.getElementById('buff-display').innerHTML = '';
+                }
+            }
+            
+            baseSpeed = 1.0 + (START_TIME - gameTimer) * 0.008;
+            const currentSpeed = baseSpeed * speedMultiplier;
+            
+            player.lane += (player.targetLane - player.lane) * 16 * dt;
+
+            if (player.stateTimer > 0) {
+                player.stateTimer -= dt;
+                if (player.stateTimer <= 0) player.state = 'run';
+            }
+            
+            if (player.flashTimer > 0) {
+                player.flashTimer -= dt;
+            }
+
+            // Sanitar AI behavior
+            sanitar.actionCooldown -= dt;
+            if (sanitar.actionCooldown <= 0) {
+                sanitar.actionCooldown = 1.5 + Math.random() * 2.0;
+                let upcomingObj = objects.find(o => o.z > 0.05 && o.z < 0.25);
+                if (upcomingObj) {
+                    sanitar.targetLane = upcomingObj.lane;
+                    if (upcomingObj.type === 'high') {
+                        sanitar.state = 'jump';
+                        sanitar.stateTimer = 0.55;
+                    } else if (upcomingObj.type === 'low') {
+                        sanitar.state = 'duck';
+                        sanitar.stateTimer = 0.55;
+                    }
+                } else {
+                    if (Math.random() < 0.3) {
+                        sanitar.targetLane = Math.floor(Math.random() * 3) - 1;
+                    } else if (Math.random() < 0.3) {
+                        sanitar.state = 'jump';
+                        sanitar.stateTimer = 0.55;
+                    }
+                }
+            }
+
+            sanitar.lane += (sanitar.targetLane - sanitar.lane) * 12 * dt;
+            if (sanitar.stateTimer > 0) {
+                sanitar.stateTimer -= dt;
+                if (sanitar.stateTimer <= 0) sanitar.state = 'run';
+            }
+
+            spawnObject();
+
+            for (let i = objects.length - 1; i >= 0; i--) {
+                let obj = objects[i];
+                obj.z += currentSpeed * dt * 0.85; 
+                
+                if (obj.active && obj.z > 0.78 && obj.z < 0.90) {
+                    if (Math.abs(obj.lane - player.lane) < 0.45) {
+                        handleCollision(obj);
+                    }
+                }
+
+                if (obj.z > 1.25) {
+                    objects.splice(i, 1);
+                }
+            }
+
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                floatingTexts[i].y -= dt * 0.4;
+                floatingTexts[i].alpha -= dt;
+                if (floatingTexts[i].alpha <= 0) floatingTexts.splice(i, 1);
+            }
+            
+            distanceTraveled += currentSpeed * dt * 2;
+        }
+
+        function handleCollision(obj) {
+            obj.active = false; 
+
+            if (obj.isItem) {
+                AudioSys.pickup();
+                activeBuff = obj.type;
+                let badgeHtml = '';
+                
+                if (obj.type === 'sj6') {
+                    speedMultiplier = 1.5;
+                    buffTimeRemaining = 5.0;
+                    addFloatingText("SJ6: SPEED x1.5", "#00ffff");
+                    badgeHtml = `<div class="buff-badge"><img src="Staff/sj6.png" onerror="this.style.display='none'"><span>SJ6 (1.5x)</span></div>`;
+                } 
+                else if (obj.type === 'obdolbos') {
+                    if (Math.random() < 0.2) {
+                        endGame("Obdolbos was lethal...");
+                        return;
+                    } else {
+                        speedMultiplier = 3.0;
+                        buffTimeRemaining = 4.0;
+                        addFloatingText("OBDOLBOS: INSANE SPEED!", "#ff00ff");
+                        badgeHtml = `<div class="buff-badge"><img src="Staff/obdolbos.png" onerror="this.style.display='none'"><span>Obdolbos (3x)</span></div>`;
+                    }
+                } 
+                else if (obj.type === 'pach') {
+                    speedMultiplier = 0.5;
+                    buffTimeRemaining = 3.0;
+                    AudioSys.eat();
+                    addFloatingText("PASTHET: EATING... (-SPEED)", "#ffaa00");
+                    badgeHtml = `<div class="buff-badge"><img src="Staff/pach.png" onerror="this.style.display='none'"><span>Eating...</span></div>`;
+                }
+                
+                document.getElementById('buff-display').innerHTML = badgeHtml;
+
+            } else {
+                let hit = false;
+                if (obj.type === 'high' && player.state !== 'jump') hit = true;
+                if (obj.type === 'low' && player.state !== 'duck') hit = true;
+
+                if (hit) {
+                    AudioSys.hit();
+                    player.flashTimer = 0.5;
+                    gameTimer += 10;
+                    addFloatingText("+10s PENALTY!", "#ff3333");
+                }
+            }
+        }
+
+        function draw() {
+            const horizonY = height * HORIZON_Y;
+            const centerX = width / 2;
+
+            if (imgLocation.complete && imgLocation.naturalWidth !== 0) {
+                ctx.drawImage(imgLocation, 0, 0, width, height);
+            } else {
+                ctx.fillStyle = '#2b3945';
+                ctx.fillRect(0, 0, width, height);
+            }
+
+            ctx.fillStyle = '#262626'; 
+            ctx.beginPath();
+            ctx.moveTo(centerX - width * 0.04, horizonY);
+            ctx.lineTo(centerX + width * 0.04, horizonY);
+            ctx.lineTo(centerX + width * 0.65, height);
+            ctx.lineTo(centerX - width * 0.65, height);
+            ctx.fill();
+
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(centerX - width * 0.04, horizonY);
+            ctx.lineTo(centerX - width * 0.65, height);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(centerX + width * 0.04, horizonY);
+            ctx.lineTo(centerX + width * 0.65, height);
+            ctx.stroke();
+
+            let gridYOffset = (distanceTraveled * 0.6) % 0.1;
+            ctx.strokeStyle = '#d4af37'; 
+            ctx.lineWidth = 3;
+
+            for (let i = 0; i < 12; i++) {
+                let z = (i / 12) + gridYOffset;
+                if (z > 1) z -= 1;
+                
+                let lineY = horizonY + Math.pow(z, 2.2) * (height - horizonY);
+                let zNext = z + 0.03;
+                let lineYNext = horizonY + Math.pow(zNext, 2.2) * (height - horizonY);
+                
+                if (lineYNext > height) lineYNext = height;
+                if (lineY > height) continue;
+
+                let lxStart = centerX - width * (LANE_WIDTH * 0.5) * z;
+                let lxEnd = centerX - width * (LANE_WIDTH * 0.5) * zNext;
+                ctx.beginPath();
+                ctx.moveTo(lxStart, lineY);
+                ctx.lineTo(lxEnd, lineYNext);
+                ctx.stroke();
+
+                let rxStart = centerX + width * (LANE_WIDTH * 0.5) * z;
+                let rxEnd = centerX + width * (LANE_WIDTH * 0.5) * zNext;
+                ctx.beginPath();
+                ctx.moveTo(rxStart, lineY);
+                ctx.lineTo(rxEnd, lineYNext);
+                ctx.stroke();
+            }
+
+            objects.sort((a, b) => a.z - b.z);
+
+            const sanitarPz = Math.pow(0.18, 2.2); 
+            const sanitarY = horizonY + sanitarPz * (height - horizonY);
+            const sanitarTargetMaxX = centerX + sanitar.lane * width * 0.45;
+            const sanitarTargetMinX = centerX + sanitar.lane * width * 0.02;
+            const sanitarX = sanitarTargetMinX + sanitarPz * (sanitarTargetMaxX - sanitarTargetMinX);
+            const sanitarSize = height * 0.22;
+            
+            ctx.save();
+            ctx.translate(sanitarX, sanitarY);
+            let sScaleX = 1.0;
+            let sScaleY = 1.0;
+            let sOffsetY = 0;
+
+            if (sanitar.state === 'jump') {
+                let t = 1 - (sanitar.stateTimer / 0.55);
+                sOffsetY = -Math.sin(t * Math.PI) * (height * 0.12);
+                sScaleY = 1.2;
+                sScaleX = 0.85;
+            } else if (sanitar.state === 'duck') {
+                sScaleY = 0.55;
+                sScaleX = 1.2;
+                sOffsetY = sanitarSize * 0.12;
+            }
+            ctx.scale(sScaleX, sScaleY);
+
+            if (imgSanitar.complete && imgSanitar.naturalWidth !== 0) {
+                ctx.drawImage(imgSanitar, -sanitarSize/2, -sanitarSize + sOffsetY, sanitarSize, sanitarSize);
+            } else {
+                ctx.fillStyle = '#fff';
+                ctx.font = '24px Orbitron';
+                ctx.fillText("Sanitar", -40, sOffsetY);
+            }
+            ctx.restore();
+
+            // Draw Speech Bubble if quote is active
+            if (currentQuote) {
+                ctx.save();
+                ctx.font = `bold ${Math.max(12, height * 0.022)}px Orbitron`;
+                let textMetrics = ctx.measureText(currentQuote);
+                let bubbleWidth = textMetrics.width + 30;
+                let bubbleHeight = 40;
+                let bubbleX = sanitarX;
+                let bubbleY = sanitarY - sanitarSize - 25;
+
+                ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+                ctx.strokeStyle = "#000";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(bubbleX - bubbleWidth / 2, bubbleY - bubbleHeight / 2, bubbleWidth, bubbleHeight, 8);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(bubbleX - 8, bubbleY + bubbleHeight / 2);
+                ctx.lineTo(bubbleX, bubbleY + bubbleHeight / 2 + 10);
+                ctx.lineTo(bubbleX + 8, bubbleY + bubbleHeight / 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = "#111";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(currentQuote, bubbleX, bubbleY);
+                ctx.restore();
+            }
+
+            objects.forEach(obj => {
+                if (!obj.active && obj.isItem) return;
+                
+                let pz = Math.pow(obj.z, 2.2); 
+                let objY = horizonY + pz * (height - horizonY);
+                
+                let targetMaxX = centerX + obj.lane * width * 0.45;
+                let targetMinX = centerX + obj.lane * width * 0.02;
+                let objX = targetMinX + pz * (targetMaxX - targetMinX);
+
+                let scale = 0.25 + pz * 1.3;
+                let baseSizeFactor = obj.isItem ? 0.12 : 0.24;
+                let spriteSize = height * baseSizeFactor * scale;
+                
+                ctx.save();
+                ctx.translate(objX, objY);
+                ctx.globalAlpha = obj.active ? 1.0 : 0.3;
+
+                if (obj.img && obj.img.complete && obj.img.naturalWidth !== 0) {
+                    ctx.drawImage(obj.img, -spriteSize/2, -spriteSize, spriteSize, spriteSize);
+                } else {
+                    ctx.fillStyle = obj.isItem ? '#0ff' : '#f00';
+                    ctx.fillRect(-spriteSize/4, -spriteSize/2, spriteSize/2, spriteSize/2);
+                }
+                ctx.restore();
+            });
+
+            let playerTargetX = centerX + player.lane * width * 0.45;
+            let playerY = height * 0.86; 
+            let basePlayerSize = height * 0.26;
+
+            ctx.save();
+            ctx.translate(playerTargetX, playerY);
+
+            if (player.flashTimer > 0) {
+                if (Math.floor(player.flashTimer * 20) % 2 === 0) {
+                    ctx.globalAlpha = 0.4;
+                }
+            }
+
+            let pScaleX = 1.0;
+            let pScaleY = 1.0;
+            let pOffsetY = 0;
+
+            if (player.state === 'jump') {
+                let t = 1 - (player.stateTimer / 0.55);
+                pOffsetY = -Math.sin(t * Math.PI) * (height * 0.22); 
+                pScaleY = 1.25; 
+                pScaleX = 0.85;
+            } else if (player.state === 'duck') {
+                pScaleY = 0.55; 
+                pScaleX = 1.25;
+                pOffsetY = basePlayerSize * 0.12;
+            }
+
+            ctx.scale(pScaleX, pScaleY);
+            
+            if (imgDoctor.complete && imgDoctor.naturalWidth !== 0) {
+                ctx.drawImage(imgDoctor, -basePlayerSize/2, -basePlayerSize + pOffsetY, basePlayerSize, basePlayerSize);
+            } else {
+                ctx.fillStyle = '#00ffcc';
+                ctx.fillRect(-basePlayerSize/4, -basePlayerSize + pOffsetY, basePlayerSize/2, basePlayerSize);
+            }
+            
+            ctx.restore();
+
+            floatingTexts.forEach(ft => {
+                ctx.fillStyle = ft.color;
+                ctx.globalAlpha = Math.max(0, ft.alpha);
+                ctx.font = `bold ${height*0.035}px Orbitron`;
+                ctx.textAlign = 'center';
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 4;
+                ctx.strokeText(ft.text, playerTargetX, height * ft.y);
+                ctx.fillText(ft.text, playerTargetX, height * ft.y);
+            });
+            ctx.globalAlpha = 1.0;
+        }
+
+        function loop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const dt = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+
+            if (gameState === 'playing') {
+                update(dt);
+            }
+            draw();
+
+            requestAnimationFrame(loop);
+        }
+
+        function startGame() {
+            AudioSys.init();
+            gameState = 'playing';
+            gameTimer = START_TIME;
+            distanceTraveled = 0;
+            objects = [];
+            floatingTexts = [];
+            player.lane = 0;
+            player.targetLane = 0;
+            player.state = 'run';
+            sanitar.lane = 0;
+            sanitar.targetLane = 0;
+            sanitar.state = 'run';
+            voiceTimer = 2.0;
+            speedMultiplier = 1.0;
+            activeBuff = null;
+            buffTimeRemaining = 0;
+            
+            document.getElementById('mainMenu').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('winScreen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('buff-display').innerHTML = '';
+        }
+
+        function endGame(reason) {
+            gameState = 'gameover';
+            AudioSys.lose();
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+            document.getElementById('deathReason').innerText = reason;
+        }
+
+        function winGame() {
+            gameState = 'win';
+            AudioSys.win();
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('winScreen').classList.remove('hidden');
+        }
+
+        document.getElementById('startBtn').addEventListener('click', startGame);
+        document.getElementById('restartBtn').addEventListener('click', startGame);
+        document.getElementById('winRestartBtn').addEventListener('click', startGame);
+
+        requestAnimationFrame(loop);
+    </script>
+</body>
+</html>
