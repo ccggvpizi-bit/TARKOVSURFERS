@@ -234,7 +234,7 @@
         imgKilla.src = 'Staff/Killa.png';
 
         const imgSj6 = new Image();
-        imgSj6.src = 'Staff/sj6.png';
+        imgSj6.src = 'Staff/SJ6.png';
 
         const imgPach = new Image();
         imgPach.src = 'Staff/pach.png';
@@ -244,6 +244,9 @@
 
         const imgLocation = new Image();
         imgLocation.src = 'Staff/Location.jpg';
+
+        const imgContainer = new Image();
+        imgContainer.src = 'Staff/container.png';
 
         // Sanitar Speech Quotes
         const sanitarQuotes = [
@@ -350,7 +353,8 @@
             y: 0.85, 
             state: 'run', // run, jump, duck
             stateTimer: 0,
-            flashTimer: 0
+            flashTimer: 0,
+            mountedCid: null
         };
 
         const sanitar = {
@@ -358,7 +362,8 @@
             targetLane: 0,
             state: 'run', // run, jump, duck
             stateTimer: 0,
-            actionCooldown: 3.0
+            actionCooldown: 3.0,
+            mountedCid: null
         };
 
         let objects = []; 
@@ -425,6 +430,23 @@
             const lane = Math.floor(Math.random() * 3) - 1;
             const recentInLane = objects.some(o => o.lane === lane && o.z < 2.5);
             if (recentInLane) return;
+
+            // Spawn long container
+            if (Math.random() < 0.06) {
+                let cid = Math.random();
+                for (let i = 0; i < 10; i++) {
+                    objects.push({
+                        lane: lane,
+                        z: 0.05 - (i * 0.04), // densely pack segments to form a long object
+                        type: i === 0 ? 'container_front' : 'container_body',
+                        isItem: false,
+                        img: imgContainer,
+                        active: true,
+                        cid: cid
+                    });
+                }
+                return;
+            }
 
             let type, isItem = false, imgAsset = null;
             
@@ -505,19 +527,26 @@
                 player.flashTimer -= dt;
             }
 
+            // Maintain player mount state
+            if (player.mountedCid) {
+                let under = objects.find(o => o.cid === player.mountedCid && o.lane === Math.round(player.lane) && o.z > 0.70 && o.z < 0.95);
+                if (!under) player.mountedCid = null;
+            }
+
             // Sanitar AI behavior
             sanitar.actionCooldown -= dt;
             if (sanitar.actionCooldown <= 0) {
                 sanitar.actionCooldown = 1.5 + Math.random() * 2.0;
-                let upcomingObj = objects.find(o => o.z > 0.05 && o.z < 0.25);
+                let upcomingObj = objects.find(o => o.z > 0.05 && o.z < 0.25 && o.lane === Math.round(sanitar.targetLane));
                 if (upcomingObj) {
-                    sanitar.targetLane = upcomingObj.lane;
-                    if (upcomingObj.type === 'high') {
+                    if (upcomingObj.type === 'high' || upcomingObj.type === 'container_front') {
                         sanitar.state = 'jump';
                         sanitar.stateTimer = 0.55;
                     } else if (upcomingObj.type === 'low') {
                         sanitar.state = 'duck';
                         sanitar.stateTimer = 0.55;
+                    } else if (upcomingObj.type === 'container_body') {
+                        sanitar.targetLane = sanitar.lane === 0 ? (Math.random() > 0.5 ? 1 : -1) : 0;
                     }
                 } else {
                     if (Math.random() < 0.3) {
@@ -535,6 +564,17 @@
                 if (sanitar.stateTimer <= 0) sanitar.state = 'run';
             }
 
+            // Maintain sanitar mount state visually
+            let sanZ = 0.18;
+            let objAtSanitar = objects.find(o => Math.abs(o.lane - sanitar.lane) < 0.45 && o.z > sanZ - 0.05 && o.z < sanZ + 0.05);
+            if (objAtSanitar && objAtSanitar.type === 'container_front' && sanitar.state === 'jump') {
+                sanitar.mountedCid = objAtSanitar.cid;
+            }
+            if (sanitar.mountedCid) {
+                let under = objects.find(o => o.cid === sanitar.mountedCid && Math.abs(o.lane - sanitar.lane) < 0.45 && o.z > sanZ - 0.1 && o.z < sanZ + 0.15);
+                if (!under) sanitar.mountedCid = null;
+            }
+
             spawnObject();
 
             for (let i = objects.length - 1; i >= 0; i--) {
@@ -543,7 +583,22 @@
                 
                 if (obj.active && obj.z > 0.78 && obj.z < 0.90) {
                     if (Math.abs(obj.lane - player.lane) < 0.45) {
-                        handleCollision(obj);
+                        if (obj.type === 'container_front') {
+                            obj.active = false;
+                            if (player.state === 'jump') {
+                                player.mountedCid = obj.cid;
+                            } else {
+                                handleCollision({type: 'high', active: true, isItem: false}); // Hit the front
+                            }
+                        } else if (obj.type === 'container_body') {
+                            if (player.mountedCid !== obj.cid) {
+                                obj.active = false;
+                                handleCollision({type: 'high', active: true, isItem: false}); // Hit the side
+                            }
+                        } else if (!player.mountedCid) {
+                            // Only hit normal ground obstacles if not on container
+                            handleCollision(obj);
+                        }
                     }
                 }
 
@@ -696,6 +751,11 @@
                 sScaleX = 1.2;
                 sOffsetY = sanitarSize * 0.12;
             }
+            
+            if (sanitar.mountedCid) {
+                sOffsetY -= sanitarSize * 0.6; // Draw Sanitar elevated
+            }
+
             ctx.scale(sScaleX, sScaleY);
 
             if (imgSanitar.complete && imgSanitar.naturalWidth !== 0) {
@@ -741,6 +801,7 @@
 
             objects.forEach(obj => {
                 if (!obj.active && obj.isItem) return;
+                if (obj.z <= 0) return; // Prevent Math.pow NaN on negative Z behind horizon
                 
                 let pz = Math.pow(obj.z, 2.2); 
                 let objY = horizonY + pz * (height - horizonY);
@@ -750,7 +811,7 @@
                 let objX = targetMinX + pz * (targetMaxX - targetMinX);
 
                 let scale = 0.25 + pz * 1.3;
-                let baseSizeFactor = obj.isItem ? 0.12 : 0.24;
+                let baseSizeFactor = obj.type && obj.type.startsWith('container') ? 0.45 : (obj.isItem ? 0.12 : 0.24);
                 let spriteSize = height * baseSizeFactor * scale;
                 
                 ctx.save();
@@ -758,7 +819,11 @@
                 ctx.globalAlpha = obj.active ? 1.0 : 0.3;
 
                 if (obj.img && obj.img.complete && obj.img.naturalWidth !== 0) {
-                    ctx.drawImage(obj.img, -spriteSize/2, -spriteSize, spriteSize, spriteSize);
+                    if (obj.type && obj.type.startsWith('container')) {
+                        ctx.drawImage(obj.img, -spriteSize/2, -spriteSize * 0.8, spriteSize, spriteSize * 0.8);
+                    } else {
+                        ctx.drawImage(obj.img, -spriteSize/2, -spriteSize, spriteSize, spriteSize);
+                    }
                 } else {
                     ctx.fillStyle = obj.isItem ? '#0ff' : '#f00';
                     ctx.fillRect(-spriteSize/4, -spriteSize/2, spriteSize/2, spriteSize/2);
@@ -794,6 +859,10 @@
                 pOffsetY = basePlayerSize * 0.12;
             }
 
+            if (player.mountedCid) {
+                pOffsetY -= basePlayerSize * 0.7; // Draw player elevated
+            }
+
             ctx.scale(pScaleX, pScaleY);
             
             if (imgDoctor.complete && imgDoctor.naturalWidth !== 0) {
@@ -804,6 +873,23 @@
             }
             
             ctx.restore();
+
+            // VIGNETTE EFFECT BASED ON BUFF
+            if (activeBuff) {
+                let vColor = 'transparent';
+                if (activeBuff === 'sj6') vColor = 'rgba(0, 150, 255, 0.45)'; // Синяя виньетка
+                else if (activeBuff === 'obdolbos') vColor = 'rgba(255, 0, 0, 0.5)'; // Красная виньетка
+                else if (activeBuff === 'pach') vColor = 'rgba(101, 67, 33, 0.6)'; // Темно-коричневая виньетка
+                
+                if (vColor !== 'transparent') {
+                    // Создаем радиальный градиент от центра (прозрачно) к краям (цветной)
+                    let gradient = ctx.createRadialGradient(centerX, height/2, height*0.3, centerX, height/2, height*0.9);
+                    gradient.addColorStop(0, 'rgba(0,0,0,0)');
+                    gradient.addColorStop(1, vColor);
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(0, 0, width, height);
+                }
+            }
 
             floatingTexts.forEach(ft => {
                 ctx.fillStyle = ft.color;
@@ -841,9 +927,11 @@
             player.lane = 0;
             player.targetLane = 0;
             player.state = 'run';
+            player.mountedCid = null;
             sanitar.lane = 0;
             sanitar.targetLane = 0;
             sanitar.state = 'run';
+            sanitar.mountedCid = null;
             voiceTimer = 2.0;
             speedMultiplier = 1.0;
             activeBuff = null;
