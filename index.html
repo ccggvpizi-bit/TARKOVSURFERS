@@ -209,8 +209,22 @@
         let width, height;
         
         function resize() {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
+            // Получаем плотность пикселей экрана (на телефонах обычно 2 или 3)
+            const dpr = window.devicePixelRatio || 1;
+            
+            width = window.innerWidth;
+            height = window.innerHeight;
+            
+            // CSS размер оставляем логическим (чтобы занимало весь экран)
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+            
+            // Физический размер холста умножаем на плотность пикселей
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            
+            // Масштабируем кисть на этот коэффициент, чтобы математика игры не сломалась
+            ctx.scale(dpr, dpr);
         }
         window.addEventListener('resize', resize);
         resize();
