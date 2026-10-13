@@ -1,10 +1,12 @@
 // ... existing code ...
     './Staff/Killa.png',
-    './Staff/SJ6.png',
+    './Staff/sj6.png',
     './Staff/pach.png',
     './Staff/obdolbos.png',
     './Staff/Location.jpg',
-    './Staff/container.png'
+    './Staff/container.png',
+    './Staff/SanitarSummer.png',
+    './Staff/SanitarX.png'
 ];
 
 self.addEventListener('install', event => {
